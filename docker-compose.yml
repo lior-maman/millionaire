@@ -1,0 +1,45 @@
+# Runs all three services together: MongoDB, FastAPI backend, React frontend.
+# Usage:  docker compose up --build
+# Then open http://localhost:8080
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # No host port exposed by default; backend reaches it over the internal
+    # network. Uncomment to inspect from the host with a Mongo client.
+    # ports:
+    #   - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: millionaire
+      # Seed the two activities automatically on first run (only if DB is empty).
+      SEED_ON_STARTUP: "true"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    # Expose the API on the host too, for Swagger at http://localhost:8000/docs
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo_data:

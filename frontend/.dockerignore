@@ -1,0 +1,12 @@
+# dependencies + build artifacts — the container builds these itself
+node_modules
+dist
+.git
+.gitignore
+
+# secrets / local env (Vite reads .env files)
+.env
+.env.*
+
+# local tooling
+.DS_Store

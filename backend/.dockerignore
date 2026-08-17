@@ -1,0 +1,19 @@
+# dependencies + build artifacts that must not be copied into the image
+node_modules
+dist
+.git
+.gitignore
+
+# secrets — never bake these into the image
+.env
+.env.*
+
+# Python caches / local virtualenv
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# local tooling
+.DS_Store
+.trash/
