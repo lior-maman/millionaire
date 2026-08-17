@@ -235,7 +235,7 @@ body {
   .rung-num { width: 18px; height: 18px; font-size: 11px; }
 }
 
-.game-header { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.game-header { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; align-items: center; }
 .chip {
   background: var(--bg-deep);
   border: 1px solid var(--border);
@@ -300,12 +300,20 @@ body {
   cursor: default;
 }
 
-/* Lifelines — square icon buttons */
-.lifelines { display: flex; gap: 12px; margin-bottom: 20px; }
+/* Timer badge — dynamic clock icon in the game header */
+.timer-badge {
+  width: 48px;
+  height: 48px;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Lifelines — square icon buttons, pinned to the right of the game header */
+.lifelines { display: flex; gap: 10px; margin-left: auto; }
 .lifeline {
-  width: 60px;
-  height: 60px;
-  padding: 4px;
+  width: 48px;
+  height: 48px;
+  padding: 3px;
   background: var(--bg-deep);
   border: 1px solid var(--gold);
   border-radius: 12px;
@@ -361,6 +369,13 @@ body {
 
 /* End screen */
 .end-panel { text-align: center; }
+.end-trophy { width: 120px; height: 120px; margin: 0 auto 8px; }
+.end-trophy.perfect { width: 160px; height: 160px; animation: trophy-pop 0.5s ease-out; }
+@keyframes trophy-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
 .end-title { font-size: 26px; margin-bottom: 12px; }
 .end-title.win { color: var(--gold); }
 .end-title.lose { color: var(--red); }

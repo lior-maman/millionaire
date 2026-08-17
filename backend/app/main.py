@@ -24,13 +24,15 @@ DELETE /api/activities/{id}/questions/{qid}     delete a question
 The correct answer is never included in play-side question payloads; it is only
 revealed through POST /api/answers, one question at a time.
 """
+
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import game_service
 from .config import settings
-from .database import connect_to_mongo, close_mongo_connection
+from .database import close_mongo_connection, connect_to_mongo
 from .models import (
     ActivityDetail,
     ActivityInput,
@@ -44,7 +46,6 @@ from .models import (
     QuestionInDB,
     QuestionInput,
 )
-from . import game_service
 
 
 @asynccontextmanager
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI):
     await connect_to_mongo()
     if settings.seed_on_startup:
         from .seed import seed_if_empty
+
         await seed_if_empty()
     yield
     await close_mongo_connection()
@@ -66,6 +68,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def require_admin(x_admin_secret: str = Header(default="")) -> None:
+    """
+    Guard for question-bank management (write) endpoints. The client must send
+    the shared secret in the "X-Admin-Secret" header, matching ADMIN_SECRET from
+    the environment. Read/play endpoints are intentionally left open.
+    """
+    if x_admin_secret != settings.admin_secret:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin secret")
 
 
 @app.get("/")
@@ -130,7 +142,12 @@ async def delete_game(game_id: str):
 
 # --- Admin endpoints (question bank management) ---------------------------
 
-@app.get("/api/activities/{activity_id}", response_model=ActivityDetail)
+
+@app.get(
+    "/api/activities/{activity_id}",
+    response_model=ActivityDetail,
+    dependencies=[Depends(require_admin)],
+)
 async def read_activity(activity_id: str):
     try:
         return await game_service.get_activity(activity_id)
@@ -138,12 +155,17 @@ async def read_activity(activity_id: str):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.post("/api/activities", response_model=ActivitySummary, status_code=201)
+@app.post(
+    "/api/activities",
+    response_model=ActivitySummary,
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
 async def add_activity(payload: ActivityInput):
     return await game_service.create_activity(payload)
 
 
-@app.delete("/api/activities/{activity_id}")
+@app.delete("/api/activities/{activity_id}", dependencies=[Depends(require_admin)])
 async def remove_activity(activity_id: str):
     try:
         await game_service.delete_activity(activity_id)
@@ -152,7 +174,12 @@ async def remove_activity(activity_id: str):
     return {"ok": True}
 
 
-@app.post("/api/activities/{activity_id}/questions", response_model=QuestionInDB, status_code=201)
+@app.post(
+    "/api/activities/{activity_id}/questions",
+    response_model=QuestionInDB,
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
 async def add_question(activity_id: str, payload: QuestionInput):
     try:
         return await game_service.add_question(activity_id, payload)
@@ -160,7 +187,11 @@ async def add_question(activity_id: str, payload: QuestionInput):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.put("/api/activities/{activity_id}/questions/{question_id}", response_model=QuestionInDB)
+@app.put(
+    "/api/activities/{activity_id}/questions/{question_id}",
+    response_model=QuestionInDB,
+    dependencies=[Depends(require_admin)],
+)
 async def edit_question(activity_id: str, question_id: str, payload: QuestionInput):
     try:
         return await game_service.update_question(activity_id, question_id, payload)
@@ -168,7 +199,10 @@ async def edit_question(activity_id: str, question_id: str, payload: QuestionInp
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.delete("/api/activities/{activity_id}/questions/{question_id}")
+@app.delete(
+    "/api/activities/{activity_id}/questions/{question_id}",
+    dependencies=[Depends(require_admin)],
+)
 async def remove_question(activity_id: str, question_id: str):
     try:
         await game_service.delete_question(activity_id, question_id)

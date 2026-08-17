@@ -70,8 +70,13 @@ Quick check: open http://localhost:8000/docs for the Swagger UI.
 
 ### Question bank management
 
+All management endpoints require the header `X-Admin-Secret: <ADMIN_SECRET>`
+(from the environment). A missing/wrong secret returns `401`. Play/read
+endpoints above are open.
+
 | Method | Path | Description |
 |---|---|---|
+| GET | `/api/activities/{id}` | full activity + per-level counts (guarded) |
 | POST | `/api/activities` | create an activity `{ "name", "questions": [] }` |
 | DELETE | `/api/activities/{id}` | delete an activity |
 | POST | `/api/activities/{id}/questions` | add a question |

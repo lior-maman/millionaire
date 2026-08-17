@@ -10,6 +10,8 @@ import { PRIZES, formatPrize } from "../prizes.js";
 import PrizeLadder from "./PrizeLadder.jsx";
 import FiftyFiftyIcon from "../icons/FiftyFiftyIcon.jsx";
 import AudienceIcon from "../icons/AudienceIcon.jsx";
+import TrophyIcon from "../icons/TrophyIcon.jsx";
+import TimerIcon from "../icons/TimerIcon.jsx";
 
 const QUESTION_TIME = 30; // seconds per question
 
@@ -187,6 +189,11 @@ export default function GameScreen({ activity, onExit }) {
     const perfect = correctCount === game.questions.length;
     return (
       <div className="panel end-panel">
+        {prize > 0 && (
+          <div className={perfect ? "end-trophy perfect" : "end-trophy"}>
+            <TrophyIcon />
+          </div>
+        )}
         <h2 className={perfect ? "end-title win" : "end-title"}>
           {perfect ? "Congratulations! You answered every question correctly!" : "Game over"}
         </h2>
@@ -219,33 +226,33 @@ export default function GameScreen({ activity, onExit }) {
           <span className={`chip diff-${q.difficulty}`}>
             {DIFFICULTY_LABEL[q.difficulty]}
           </span>
-          <span className={timeLeft <= 10 ? "chip timer danger" : "chip timer"}>
-            Time: {timeLeft}
+          <span className="timer-badge" aria-label={`Time remaining: ${timeLeft} seconds`}>
+            <TimerIcon seconds={timeLeft} danger={timeLeft <= 10} />
           </span>
+
+          <div className="lifelines">
+            <button
+              className="lifeline"
+              disabled={!lifelines.fifty || locked}
+              onClick={useFiftyFifty}
+              title="50:50 — remove two wrong answers"
+              aria-label="50:50 lifeline — remove two wrong answers"
+            >
+              <FiftyFiftyIcon />
+            </button>
+            <button
+              className="lifeline"
+              disabled={!lifelines.audience || locked}
+              onClick={useAudience}
+              title="Ask the Audience"
+              aria-label="Ask the Audience lifeline"
+            >
+              <AudienceIcon />
+            </button>
+          </div>
         </div>
 
         <div className="question-box" dir="auto">{q.text}</div>
-
-        <div className="lifelines">
-          <button
-            className="lifeline"
-            disabled={!lifelines.fifty || locked}
-            onClick={useFiftyFifty}
-            title="50:50 — remove two wrong answers"
-            aria-label="50:50 lifeline — remove two wrong answers"
-          >
-            <FiftyFiftyIcon />
-          </button>
-          <button
-            className="lifeline"
-            disabled={!lifelines.audience || locked}
-            onClick={useAudience}
-            title="Ask the Audience"
-            aria-label="Ask the Audience lifeline"
-          >
-            <AudienceIcon />
-          </button>
-        </div>
 
         <div className="options-grid">
           {q.options.map((opt, i) => {

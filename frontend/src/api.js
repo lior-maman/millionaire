@@ -6,9 +6,10 @@
 const BASE = import.meta.env.VITE_API_BASE || "";
 
 async function request(path, options = {}) {
+  const { headers, ...rest } = options;
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
+    headers: { "Content-Type": "application/json", ...headers },
+    ...rest,
   });
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
@@ -23,6 +24,9 @@ async function request(path, options = {}) {
   // DELETE endpoints may return {ok:true}; all are JSON.
   return res.json();
 }
+
+// Header carrying the admin secret for question-bank management endpoints.
+const adminHeaders = (secret) => ({ "X-Admin-Secret": secret });
 
 // --- Play ---------------------------------------------------------------
 export const listActivities = () => request("/api/activities");
@@ -59,31 +63,39 @@ export const askAudience = (gameId, questionId) =>
     body: JSON.stringify({ game_id: gameId, question_id: questionId }),
   });
 
-// --- Admin --------------------------------------------------------------
-export const getActivity = (id) => request(`/api/activities/${id}`);
+// --- Admin (all require the admin secret) -------------------------------
+export const getActivity = (id, secret) =>
+  request(`/api/activities/${id}`, { headers: adminHeaders(secret) });
 
-export const createActivity = (name, questions = []) =>
+export const createActivity = (name, questions = [], secret) =>
   request("/api/activities", {
     method: "POST",
+    headers: adminHeaders(secret),
     body: JSON.stringify({ name, questions }),
   });
 
-export const deleteActivity = (id) =>
-  request(`/api/activities/${id}`, { method: "DELETE" });
+export const deleteActivity = (id, secret) =>
+  request(`/api/activities/${id}`, {
+    method: "DELETE",
+    headers: adminHeaders(secret),
+  });
 
-export const addQuestion = (activityId, question) =>
+export const addQuestion = (activityId, question, secret) =>
   request(`/api/activities/${activityId}/questions`, {
     method: "POST",
+    headers: adminHeaders(secret),
     body: JSON.stringify(question),
   });
 
-export const updateQuestion = (activityId, questionId, question) =>
+export const updateQuestion = (activityId, questionId, question, secret) =>
   request(`/api/activities/${activityId}/questions/${questionId}`, {
     method: "PUT",
+    headers: adminHeaders(secret),
     body: JSON.stringify(question),
   });
 
-export const deleteQuestion = (activityId, questionId) =>
+export const deleteQuestion = (activityId, questionId, secret) =>
   request(`/api/activities/${activityId}/questions/${questionId}`, {
     method: "DELETE",
+    headers: adminHeaders(secret),
   });

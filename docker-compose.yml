@@ -26,6 +26,8 @@ services:
       MONGODB_DB: millionaire
       # Seed the two activities automatically on first run (only if DB is empty).
       SEED_ON_STARTUP: "true"
+      # Password for question-bank management. Change this for anything real.
+      ADMIN_SECRET: "1122334455"
     depends_on:
       mongo:
         condition: service_healthy

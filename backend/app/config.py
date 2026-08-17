@@ -23,5 +23,9 @@ class Settings(BaseSettings):
     # When true, seed the DB on startup if it has no activities (handy in Docker).
     seed_on_startup: bool = False
 
+    # Shared secret required for question-bank management (write) endpoints.
+    # Clients send it in the "X-Admin-Secret" header. Set a real value in .env.
+    admin_secret: str = "change-me"
+
 
 settings = Settings()
