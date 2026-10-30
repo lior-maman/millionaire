@@ -24,21 +24,15 @@ const EMPTY_QUESTION = {
 
 /**
  * Admin screen: manage the question bank.
- *   - Gated by a password (the admin secret), asked on every entry (not stored).
+ *   - Shown only to signed-in admins; every management call is also checked
+ *     server-side against the user's role (hiding the UI is not the protection).
  *   - list / create / delete activities
  *   - within an activity: view per-level counts, add / edit / delete questions
- *
- * The secret is sent as the X-Admin-Secret header on every management call and
- * verified server-side; hiding the UI alone is not the protection.
  *
  * Deletion is warning-only: a level under 5 questions is flagged (not blocked);
  * game generation surfaces the error at play time.
  */
 export default function AdminScreen() {
-  const [secret, setSecret] = useState(null);       // set once the password is verified
-  const [pwInput, setPwInput] = useState("");
-  const [pwError, setPwError] = useState(null);
-
   const [activities, setActivities] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [detail, setDetail] = useState(null);
@@ -56,48 +50,22 @@ export default function AdminScreen() {
     setSelectedId(nextId);
   }
 
-  // Load activities only after the password is accepted.
   useEffect(() => {
-    if (secret) refreshActivities().catch((e) => setError(e.message));
-  }, [secret]);
+    refreshActivities().catch((e) => setError(e.message));
+  }, []);
 
   useEffect(() => {
-    if (!secret || !selectedId) {
+    if (!selectedId) {
       setDetail(null);
       return;
     }
-    getActivity(selectedId, secret)
+    getActivity(selectedId)
       .then(setDetail)
       .catch((e) => setError(e.message));
-  }, [selectedId, secret]);
-
-  // Verify the entered password by attempting an authenticated call.
-  // GET /api/activities is open (play needs it), so we validate the secret with
-  // a management call: list activities, then fetch one's detail (which is guarded).
-  async function submitPassword(e) {
-    e.preventDefault();
-    setPwError(null);
-    const candidate = pwInput.trim();
-    if (!candidate) return;
-    try {
-      const list = await listActivities();
-      if (list.length > 0) {
-        // getActivity is guarded — a wrong secret throws 401 here.
-        await getActivity(list[0].id, candidate);
-      }
-      setSecret(candidate);   // accepted
-      setPwInput("");
-    } catch (err) {
-      setPwError(
-        err.message.includes("admin secret")
-          ? "Wrong password."
-          : err.message
-      );
-    }
-  }
+  }, [selectedId]);
 
   async function reloadDetail() {
-    if (selectedId) setDetail(await getActivity(selectedId, secret));
+    if (selectedId) setDetail(await getActivity(selectedId));
     await refreshActivities(selectedId);
   }
 
@@ -114,7 +82,7 @@ export default function AdminScreen() {
 
   const onCreateActivity = guard(async () => {
     if (!newActivityName.trim()) return;
-    const created = await createActivity(newActivityName.trim(), [], secret);
+    const created = await createActivity(newActivityName.trim(), []);
     setNewActivityName("");
     await refreshActivities(created.id);
   });
@@ -122,7 +90,7 @@ export default function AdminScreen() {
   const onDeleteActivity = guard(async () => {
     if (!selectedId) return;
     if (!confirm(`Delete the activity "${detail?.name}" and all its questions?`)) return;
-    await deleteActivity(selectedId, secret);
+    await deleteActivity(selectedId);
     await refreshActivities();
   });
 
@@ -133,9 +101,9 @@ export default function AdminScreen() {
       return;
     }
     if (editingId) {
-      await updateQuestion(selectedId, editingId, draft, secret);
+      await updateQuestion(selectedId, editingId, draft);
     } else {
-      await addQuestion(selectedId, draft, secret);
+      await addQuestion(selectedId, draft);
     }
     setDraft(EMPTY_QUESTION);
     setEditingId(null);
@@ -154,7 +122,7 @@ export default function AdminScreen() {
 
   const onDeleteQuestion = guard(async (qid) => {
     if (!confirm("Delete this question?")) return;
-    await deleteQuestion(selectedId, qid, secret);
+    await deleteQuestion(selectedId, qid);
     if (editingId === qid) {
       setEditingId(null);
       setDraft(EMPTY_QUESTION);
@@ -168,28 +136,6 @@ export default function AdminScreen() {
       options[i] = value;
       return { ...d, options };
     });
-  }
-
-  // --- Password gate -------------------------------------------------------
-  if (!secret) {
-    return (
-      <div className="panel start-panel">
-        <h2 className="panel-title">Manage questions</h2>
-        <p className="muted">Enter the admin password to manage the question bank.</p>
-        <form className="field" onSubmit={submitPassword}>
-          <input
-            className="input"
-            type="password"
-            placeholder="Password"
-            value={pwInput}
-            onChange={(e) => setPwInput(e.target.value)}
-            autoFocus
-          />
-          <button className="btn btn-primary btn-lg" type="submit">Unlock</button>
-        </form>
-        {pwError && <p className="error">{pwError}</p>}
-      </div>
-    );
   }
 
   return (
@@ -215,7 +161,6 @@ export default function AdminScreen() {
             Delete activity
           </button>
         </div>
-
         <div className="row wrap add-activity">
           <input
             className="input"
@@ -261,7 +206,6 @@ export default function AdminScreen() {
                   onChange={(e) => setDraft({ ...draft, text: e.target.value })}
                 />
               </label>
-
               <div className="options-edit">
                 {draft.options.map((opt, i) => (
                   <label key={i} className="option-edit">
@@ -283,7 +227,6 @@ export default function AdminScreen() {
                 ))}
               </div>
               <p className="muted small">Select the radio button next to the correct answer.</p>
-
               <label className="field">
                 <span className="field-label">Difficulty</span>
                 <select
@@ -296,7 +239,6 @@ export default function AdminScreen() {
                   ))}
                 </select>
               </label>
-
               <div className="row">
                 <button className="btn btn-primary" type="submit">
                   {editingId ? "Save changes" : "Add question"}

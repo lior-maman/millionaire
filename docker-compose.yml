@@ -1,6 +1,6 @@
 # Runs all three services together: MongoDB, FastAPI backend, React frontend.
 # Usage:  docker compose up --build
-# Then open http://localhost:8080
+# Then open http://localhost:8081
 
 services:
   mongo:
@@ -27,9 +27,11 @@ services:
       MONGODB_DB: millionaire
       # Seed the two activities automatically on first run (only if DB is empty).
       SEED_ON_STARTUP: "true"
-      # Password for question-bank management. Set it in a root .env file
-      # (gitignored), e.g.  ADMIN_SECRET=something-long
-      ADMIN_SECRET: ${ADMIN_SECRET:-change-me}
+      # Login tokens + first admin. Put real values in a root .env file
+      # (gitignored). The dev defaults below are for local use only.
+      SESSION_SECRET: ${SESSION_SECRET:-local-dev-secret-not-for-prod}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@local.test}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-change-me-now}
     depends_on:
       mongo:
         condition: service_healthy

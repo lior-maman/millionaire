@@ -3,18 +3,19 @@ import {
   createGame,
   submitAnswer,
   forgetGame,
+  finishGame,
   fiftyFifty,
   askAudience,
 } from "../api.js";
 import { PRIZES, formatPrize } from "../prizes.js";
 import PrizeLadder from "./PrizeLadder.jsx";
+import LeaderboardScreen from "./LeaderboardScreen.jsx";
 import FiftyFiftyIcon from "../icons/FiftyFiftyIcon.jsx";
 import AudienceIcon from "../icons/AudienceIcon.jsx";
 import TrophyIcon from "../icons/TrophyIcon.jsx";
 import TimerIcon from "../icons/TimerIcon.jsx";
 
 const QUESTION_TIME = 30; // seconds per question
-
 const DIFFICULTY_LABEL = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
 /**
@@ -28,13 +29,13 @@ const DIFFICULTY_LABEL = { easy: "Easy", medium: "Medium", hard: "Hard" };
  * the number of correct answers.
  *
  * Answer correctness is decided server-side via submitAnswer — the client never
- * receives the correct index up front.
+ * receives the correct index up front. When the game ends, finishGame asks the
+ * server to save ITS OWN score to the leaderboard, which is then shown below.
  */
-export default function GameScreen({ activity, onExit }) {
+export default function GameScreen({ activity, currentUser, onExit }) {
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
   const [index, setIndex] = useState(0);          // current question index
   const [correctCount, setCorrectCount] = useState(0); // rungs climbed
   const [locked, setLocked] = useState(false);    // true after answering, until next
@@ -42,6 +43,7 @@ export default function GameScreen({ activity, onExit }) {
   const [correctIndex, setCorrectIndex] = useState(null);
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME);
   const [status, setStatus] = useState("loading"); // loading|playing|finished
+  const [saveState, setSaveState] = useState(null); // null|saving|saved|failed
 
   // Lifelines — each usable once per game.
   const [lifelines, setLifelines] = useState({ fifty: true, audience: true });
@@ -49,7 +51,8 @@ export default function GameScreen({ activity, onExit }) {
   const [audience, setAudience] = useState(null);  // percentages array or null
 
   const timerRef = useRef(null);
-  const gameIdRef = useRef(null); // latest game_id, for reliable cleanup
+  const gameIdRef = useRef(null); // latest unfinished game_id, for reliable cleanup
+  const savedGameRef = useRef(null); // game_id whose result was already sent
 
   // Prize = amount at the highest rung reached (0 if none correct yet).
   const prize = correctCount > 0 ? PRIZES[correctCount - 1] : 0;
@@ -73,11 +76,23 @@ export default function GameScreen({ activity, onExit }) {
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
-      // Free the server-side answer key for whatever game is currently loaded.
+      // Free the server-side answer key for a game left mid-way.
       if (gameIdRef.current) forgetGame(gameIdRef.current).catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity.id]);
+
+  // Game over → save the result once (the server counts the score itself).
+  useEffect(() => {
+    if (status !== "finished" || !game) return;
+    if (savedGameRef.current === game.game_id) return; // save once per game
+    savedGameRef.current = game.game_id;
+    gameIdRef.current = null; // finished games are removed by finishGame
+    setSaveState("saving");
+    finishGame(game.game_id)
+      .then(() => setSaveState("saved"))
+      .catch(() => setSaveState("failed"));
+  }, [status, game]);
 
   // Countdown for the current question. Runs only while actively playing and
   // the question is not yet locked (answered).
@@ -163,6 +178,7 @@ export default function GameScreen({ activity, onExit }) {
     setIndex(0);
     setCorrectCount(0);
     setLifelines({ fifty: true, audience: true });
+    setSaveState(null);
     setStatus("loading");
     setLoading(true);
     createGame(activity.id)
@@ -188,25 +204,39 @@ export default function GameScreen({ activity, onExit }) {
   if (status === "finished") {
     const perfect = correctCount === game.questions.length;
     return (
-      <div className="panel end-panel">
-        {prize > 0 && (
-          <div className={perfect ? "end-trophy perfect" : "end-trophy"}>
-            <TrophyIcon />
+      <div className="end-wrap">
+        <div className="panel end-panel">
+          {prize > 0 && (
+            <div className={perfect ? "end-trophy perfect" : "end-trophy"}>
+              <TrophyIcon />
+            </div>
+          )}
+          <h2 className={perfect ? "end-title win" : "end-title"}>
+            {perfect ? "Congratulations! You answered every question correctly!" : "Game over"}
+          </h2>
+          <p className="end-score">
+            {prize > 0
+              ? `You won ${formatPrize(prize)}`
+              : "No prize this time"}
+          </p>
+          <p className="muted">You answered {correctCount} of {game.questions.length} questions correctly.</p>
+          {saveState === "saving" && <p className="muted small">Saving your score…</p>}
+          {saveState === "failed" && (
+            <p className="error">Your score couldn't be saved to the leaderboard.</p>
+          )}
+          <div className="row">
+            <button className="btn btn-primary" onClick={restart}>Play again</button>
+            <button className="btn" onClick={onExit}>Choose another activity</button>
           </div>
-        )}
-        <h2 className={perfect ? "end-title win" : "end-title"}>
-          {perfect ? "Congratulations! You answered every question correctly!" : "Game over"}
-        </h2>
-        <p className="end-score">
-          {prize > 0
-            ? `You won ${formatPrize(prize)}`
-            : "No prize this time"}
-        </p>
-        <p className="muted">You answered {correctCount} of {game.questions.length} questions correctly.</p>
-        <div className="row">
-          <button className="btn btn-primary" onClick={restart}>Play again</button>
-          <button className="btn" onClick={onExit}>Choose another activity</button>
         </div>
+        {/* Wait for the save so the table already includes this game. */}
+        {(saveState === "saved" || saveState === "failed") && (
+          <LeaderboardScreen
+            currentUser={currentUser}
+            initialActivityId={activity.id}
+            compact
+          />
+        )}
       </div>
     );
   }
@@ -229,7 +259,6 @@ export default function GameScreen({ activity, onExit }) {
           <span className="timer-badge" aria-label={`Time remaining: ${timeLeft} seconds`}>
             <TimerIcon seconds={timeLeft} danger={timeLeft <= 10} />
           </span>
-
           <div className="lifelines">
             <button
               className="lifeline"

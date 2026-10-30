@@ -23,9 +23,18 @@ class Settings(BaseSettings):
     # When true, seed the DB on startup if it has no activities (handy in Docker).
     seed_on_startup: bool = False
 
-    # Shared secret required for question-bank management (write) endpoints.
-    # Clients send it in the "X-Admin-Secret" header. Set a real value in .env.
-    admin_secret: str = "change-me"
+    # --- Users / sessions -------------------------------------------------
+    # HMAC key that signs login tokens. REQUIRED — the app refuses to start
+    # without it. Use a long random string and never commit it.
+    session_secret: str = ""
+    # How long a login lasts before the player has to sign in again (seconds).
+    session_ttl: int = 7 * 24 * 3600
+
+    # First-admin bootstrap. If BOTH are set and no admin exists yet, this
+    # account is created as an admin on startup. Ignored once an admin exists —
+    # remove the password from the environment after the first deploy.
+    bootstrap_admin_email: str = ""
+    bootstrap_admin_password: str = ""
 
 
 settings = Settings()

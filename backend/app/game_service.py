@@ -5,12 +5,16 @@ Responsibilities:
   1. List activities (for menu screens) and read one activity in full.
   2. Generate a game from an activity — draw 5 RANDOM questions per difficulty
      (easy/medium/hard) => 15 questions total, correct answer stripped out.
-  3. Check a submitted answer server-side.
+  3. Check a submitted answer server-side, and keep the score server-side.
   4. Admin CRUD: add/remove activities, add/edit/remove questions.
 
 Generated games are held in memory keyed by game_id. That keeps the correct
 answers off the client while a game is in progress. For production you'd move
 this store to Redis or a Mongo `games` collection; the interface stays the same.
+
+Scoring: each game belongs to the user who created it, and each question can be
+answered ONCE (the first answer counts). The server counts correct answers
+itself, so the score saved to the leaderboard can't be inflated by the client.
 """
 import random
 import uuid
@@ -34,8 +38,9 @@ from .models import (
 # In-memory store: game_id -> { question_id: correct_index }
 # Only the answer key lives here; the questions themselves go to the client.
 _answer_keys: dict[str, dict[str, int]] = {}
-# game_id -> activity_id, so we can validate answers belong to a real game.
-_game_activity: dict[str, str] = {}
+# game_id -> owner + live score:
+#   { user_id, activity_id, activity_name, answered: set[qid], correct: int }
+_games: dict[str, dict] = {}
 
 
 def _oid(activity_id: str) -> ObjectId:
@@ -43,6 +48,14 @@ def _oid(activity_id: str) -> ObjectId:
         return ObjectId(activity_id)
     except (InvalidId, TypeError):
         raise ValueError(f"invalid activity id: {activity_id!r}")
+
+
+def _owned_game(game_id: str, user_id: str) -> dict:
+    """The game's state, or ValueError if it doesn't exist / isn't this user's."""
+    game = _games.get(game_id)
+    if game is None or game["user_id"] != user_id:
+        raise ValueError("unknown or expired game")
+    return game
 
 
 async def list_activities() -> list[ActivitySummary]:
@@ -60,7 +73,7 @@ async def list_activities() -> list[ActivitySummary]:
     return out
 
 
-async def generate_game(activity_id: str) -> Game:
+async def generate_game(activity_id: str, user_id: str) -> Game:
     """
     Build a game from an activity: 5 random questions per difficulty level.
     Raises ValueError if the activity is missing or a level is understocked.
@@ -107,7 +120,13 @@ async def generate_game(activity_id: str) -> Game:
         )
 
     _answer_keys[game_id] = answer_key
-    _game_activity[game_id] = activity_id
+    _games[game_id] = {
+        "user_id": user_id,
+        "activity_id": activity_id,
+        "activity_name": doc["name"],
+        "answered": set(),
+        "correct": 0,
+    }
 
     return Game(
         game_id=game_id,
@@ -118,25 +137,52 @@ async def generate_game(activity_id: str) -> Game:
     )
 
 
-def check_answer(game_id: str, question_id: str, selected_index: int) -> tuple[bool, int]:
+def check_answer(
+    game_id: str, question_id: str, selected_index: int, user_id: str
+) -> tuple[bool, int]:
     """
-    Validate an answer against the stored key.
-    Returns (is_correct, correct_index). Raises ValueError on unknown game/question.
+    Validate an answer against the stored key and update the server-side score.
+    Returns (is_correct, correct_index). Raises ValueError on unknown game,
+    foreign game, unknown question, or a second answer to the same question.
     """
-    key = _answer_keys.get(game_id)
-    if key is None:
-        raise ValueError("unknown or expired game")
+    game = _owned_game(game_id, user_id)
+    key = _answer_keys[game_id]
     if question_id not in key:
         raise ValueError("question does not belong to this game")
+    if question_id in game["answered"]:
+        raise ValueError("question already answered")
 
     correct_index = key[question_id]
-    return (selected_index == correct_index, correct_index)
+    correct = selected_index == correct_index
+    game["answered"].add(question_id)
+    if correct:
+        game["correct"] += 1
+    return (correct, correct_index)
 
 
-def forget_game(game_id: str) -> None:
-    """Drop a finished game's answer key from memory."""
+def finish_game(game_id: str, user_id: str) -> dict:
+    """
+    End a game and return its final result for saving. Unanswered questions
+    (timeouts) count as wrong. The game is removed, so it can be finished once.
+    """
+    game = _owned_game(game_id, user_id)
+    total = len(_answer_keys[game_id])
+    forget_game(game_id, user_id)
+    return {
+        "activity_id": game["activity_id"],
+        "activity_name": game["activity_name"],
+        "correct": game["correct"],
+        "total": total,
+    }
+
+
+def forget_game(game_id: str, user_id: str) -> None:
+    """Drop a game's answer key from memory (only the owner may)."""
+    game = _games.get(game_id)
+    if game is None or game["user_id"] != user_id:
+        return
     _answer_keys.pop(game_id, None)
-    _game_activity.pop(game_id, None)
+    _games.pop(game_id, None)
 
 
 # --- Lifelines ------------------------------------------------------------
@@ -147,32 +193,31 @@ _NUM_OPTIONS = 4
 AUDIENCE_CORRECT_PROBABILITY = 0.8  # 80% of the time the poll points at the answer
 
 
-def _correct_for(game_id: str, question_id: str) -> int:
-    key = _answer_keys.get(game_id)
-    if key is None:
-        raise ValueError("unknown or expired game")
+def _correct_for(game_id: str, question_id: str, user_id: str) -> int:
+    _owned_game(game_id, user_id)
+    key = _answer_keys[game_id]
     if question_id not in key:
         raise ValueError("question does not belong to this game")
     return key[question_id]
 
 
-def fifty_fifty(game_id: str, question_id: str) -> list[int]:
+def fifty_fifty(game_id: str, question_id: str, user_id: str) -> list[int]:
     """
     Return the indices of two WRONG options to hide, leaving the correct one
     and one random distractor. Does not reveal which of the remaining is correct.
     """
-    correct = _correct_for(game_id, question_id)
+    correct = _correct_for(game_id, question_id, user_id)
     wrong = [i for i in range(_NUM_OPTIONS) if i != correct]
     return random.sample(wrong, 2)
 
 
-def ask_audience(game_id: str, question_id: str) -> list[int]:
+def ask_audience(game_id: str, question_id: str, user_id: str) -> list[int]:
     """
     Return audience vote percentages per option (sums to 100). 80% of the time
     the highest bar is the correct answer; 20% of the time the audience is
     "wrong" and favors a random distractor. Never states the answer outright.
     """
-    correct = _correct_for(game_id, question_id)
+    correct = _correct_for(game_id, question_id, user_id)
 
     if random.random() < AUDIENCE_CORRECT_PROBABILITY:
         favored = correct
@@ -287,4 +332,3 @@ async def delete_question(activity_id: str, question_id: str) -> None:
     )
     if result.matched_count == 0:
         raise ValueError("activity not found")
-
