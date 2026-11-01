@@ -118,6 +118,13 @@ export const askAudience = (gameId, questionId) =>
     body: JSON.stringify({ game_id: gameId, question_id: questionId }),
   });
 
+// Hint — fetched only when the player asks, so it can't be read ahead.
+export const getHint = (gameId, questionId) =>
+  request("/api/lifelines/hint", {
+    method: "POST",
+    body: JSON.stringify({ game_id: gameId, question_id: questionId }),
+  });
+
 // --- Admin: question bank (admin role) -----------------------------------
 
 export const getActivity = (id) => request(`/api/activities/${id}`);

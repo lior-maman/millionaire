@@ -88,3 +88,73 @@
   background: var(--btn-hover);
   outline: 1px solid var(--gold);
 }
+
+/* --- Hint lifeline -------------------------------------------------------- */
+
+/* Glowing pulse so players notice the hint is available on this question. */
+.hint-btn:not(:disabled) {
+  border-radius: 50%;
+  animation: hint-glow 1.8s ease-in-out infinite;
+}
+
+.hint-btn.used {
+  animation: none;
+}
+
+@keyframes hint-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); transform: scale(1); }
+  50%      { box-shadow: 0 0 18px 4px rgba(255, 215, 0, 0.65); transform: scale(1.06); }
+}
+
+.hint-card {
+  margin: 14px 0 4px;
+  padding: 14px 18px;
+  border: 1px solid var(--gold);
+  border-inline-start-width: 4px;
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow: 0 6px 20px var(--shadow);
+  animation: hint-reveal 0.35s ease-out;
+}
+
+.hint-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--gold-strong);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hint-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+@keyframes hint-reveal {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hint-input {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.hint-flag {
+  flex-shrink: 0;
+  cursor: help;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint-btn:not(:disabled),
+  .hint-card {
+    animation: none;
+  }
+  .hint-btn:not(:disabled) {
+    box-shadow: 0 0 12px 3px rgba(255, 215, 0, 0.55);
+  }
+}

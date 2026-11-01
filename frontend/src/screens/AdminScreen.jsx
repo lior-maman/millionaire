@@ -20,7 +20,10 @@ const EMPTY_QUESTION = {
   options: ["", "", "", ""],
   correct_index: 0,
   difficulty: "easy",
+  hint: "",
 };
+
+const HINT_MAX = 300; // matches HINT_MAX_LEN on the server
 
 /**
  * Admin screen: manage the question bank.
@@ -117,6 +120,7 @@ export default function AdminScreen() {
       options: [...q.options],
       correct_index: q.correct_index,
       difficulty: q.difficulty,
+      hint: q.hint || "",
     });
   };
 
@@ -228,6 +232,19 @@ export default function AdminScreen() {
               </div>
               <p className="muted small">Select the radio button next to the correct answer.</p>
               <label className="field">
+                <span className="field-label">Hint (optional)</span>
+                <textarea
+                  className="input hint-input"
+                  dir="auto"
+                  rows={2}
+                  maxLength={HINT_MAX}
+                  placeholder="A clue that helps without giving the answer away"
+                  value={draft.hint}
+                  onChange={(e) => setDraft({ ...draft, hint: e.target.value })}
+                />
+                <span className="muted small">{draft.hint.length}/{HINT_MAX}</span>
+              </label>
+              <label className="field">
                 <span className="field-label">Difficulty</span>
                 <select
                   className="select"
@@ -269,6 +286,7 @@ export default function AdminScreen() {
                       {DIFFICULTIES.find((d) => d.value === q.difficulty)?.label}
                     </span>
                     <span className="q-text" dir="auto">{q.text}</span>
+                    {q.hint && <span className="hint-flag" title={q.hint}>💡</span>}
                   </div>
                   <div className="q-item-actions">
                     <button className="btn small" onClick={() => onEditQuestion(q)}>

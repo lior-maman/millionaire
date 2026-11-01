@@ -6,12 +6,14 @@ import {
   finishGame,
   fiftyFifty,
   askAudience,
+  getHint,
 } from "../api.js";
 import { PRIZES, formatPrize } from "../prizes.js";
 import PrizeLadder from "./PrizeLadder.jsx";
 import LeaderboardScreen from "./LeaderboardScreen.jsx";
 import FiftyFiftyIcon from "../icons/FiftyFiftyIcon.jsx";
 import AudienceIcon from "../icons/AudienceIcon.jsx";
+import HintIcon from "../icons/HintIcon.jsx";
 import TrophyIcon from "../icons/TrophyIcon.jsx";
 import TimerIcon from "../icons/TimerIcon.jsx";
 
@@ -49,6 +51,8 @@ export default function GameScreen({ activity, currentUser, onExit }) {
   const [lifelines, setLifelines] = useState({ fifty: true, audience: true });
   const [hidden, setHidden] = useState([]);        // option indices hidden by 50:50
   const [audience, setAudience] = useState(null);  // percentages array or null
+  // Hint — free and available on every question that has one (not once per game).
+  const [hint, setHint] = useState(null);          // hint text once revealed
 
   const timerRef = useRef(null);
   const gameIdRef = useRef(null); // latest unfinished game_id, for reliable cleanup
@@ -114,6 +118,18 @@ export default function GameScreen({ activity, currentUser, onExit }) {
     // Lifeline effects apply to a single question only.
     setHidden([]);
     setAudience(null);
+    setHint(null);
+  }
+
+  // Hint — reveal the admin-written hint for the current question.
+  async function showHint() {
+    if (hint || locked) return;
+    try {
+      const res = await getHint(game.game_id, game.questions[index].id);
+      setHint(res.hint);
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
   // 50:50 — hide two wrong options for the current question.
@@ -278,10 +294,28 @@ export default function GameScreen({ activity, currentUser, onExit }) {
             >
               <AudienceIcon />
             </button>
+            {q.has_hint && (
+              <button
+                className={hint ? "lifeline hint-btn used" : "lifeline hint-btn"}
+                disabled={!!hint || locked}
+                onClick={showHint}
+                title="Hint"
+                aria-label="Show a hint for this question"
+              >
+                <HintIcon />
+              </button>
+            )}
           </div>
         </div>
 
         <div className="question-box" dir="auto">{q.text}</div>
+
+        {hint && (
+          <div className="hint-card" role="status" dir="auto">
+            <span className="hint-label">💡 Hint</span>
+            <p className="hint-text">{hint}</p>
+          </div>
+        )}
 
         <div className="options-grid">
           {q.options.map((opt, i) => {

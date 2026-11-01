@@ -15,6 +15,7 @@ POST /api/games                { activity_id } -> a generated 15-question game
 POST /api/answers              { game_id, question_id, selected_index } -> result
 POST /api/lifelines/fifty-fifty { game_id, question_id } -> { hidden: [i, j] }
 POST /api/lifelines/audience    { game_id, question_id } -> { percentages: [..] }
+POST /api/lifelines/hint        { game_id, question_id } -> { hint }
 POST /api/games/{id}/finish     end the game, save the score -> result
 DELETE /api/games/{game_id}    forget an abandoned game
 GET  /api/leaderboard          player ranking (?activity_id= optional)
@@ -65,6 +66,7 @@ from .models import (
     AudienceResponse,
     FiftyFiftyResponse,
     Game,
+    HintResponse,
     LifelineRequest,
     QuestionInDB,
     QuestionInput,
@@ -207,6 +209,15 @@ async def lifeline_audience(req: LifelineRequest, user: dict = Depends(require_u
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return AudienceResponse(percentages=pct)
+
+
+@app.post("/api/lifelines/hint", response_model=HintResponse)
+async def lifeline_hint(req: LifelineRequest, user: dict = Depends(require_user)):
+    try:
+        hint = game_service.get_hint(req.game_id, req.question_id, user["id"])
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return HintResponse(hint=hint)
 
 
 @app.post("/api/games/{game_id}/finish")

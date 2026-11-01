@@ -101,6 +101,7 @@ async def generate_game(activity_id: str, user_id: str) -> Game:
     # We track where the correct answer lands and store THAT in the answer key,
     # so server-side checking stays correct and the client never sees the answer.
     answer_key: dict[str, int] = {}
+    hints: dict[str, str] = {}
     game_questions: list[GameQuestion] = []
     for i, q in enumerate(picked):
         order = list(range(len(q["options"])))
@@ -109,6 +110,9 @@ async def generate_game(activity_id: str, user_id: str) -> Game:
         new_correct = order.index(q["correct_index"])
 
         answer_key[q["id"]] = new_correct
+        hint = (q.get("hint") or "").strip()
+        if hint:
+            hints[q["id"]] = hint
         game_questions.append(
             GameQuestion(
                 id=q["id"],
@@ -116,6 +120,7 @@ async def generate_game(activity_id: str, user_id: str) -> Game:
                 options=shuffled_options,
                 difficulty=q["difficulty"],
                 order=i,
+                has_hint=bool(hint),
             )
         )
 
@@ -126,6 +131,7 @@ async def generate_game(activity_id: str, user_id: str) -> Game:
         "activity_name": doc["name"],
         "answered": set(),
         "correct": 0,
+        "hints": hints,
     }
 
     return Game(
@@ -209,6 +215,19 @@ def fifty_fifty(game_id: str, question_id: str, user_id: str) -> list[int]:
     correct = _correct_for(game_id, question_id, user_id)
     wrong = [i for i in range(_NUM_OPTIONS) if i != correct]
     return random.sample(wrong, 2)
+
+
+def get_hint(game_id: str, question_id: str, user_id: str) -> str:
+    """
+    Return the admin-written hint for a question. Free and unlimited — one per
+    question, available on every question that has one; it doesn't affect the
+    score. Raises ValueError if the question has no hint.
+    """
+    _correct_for(game_id, question_id, user_id)  # ownership + membership check
+    hint = _games[game_id]["hints"].get(question_id)
+    if not hint:
+        raise ValueError("this question has no hint")
+    return hint
 
 
 def ask_audience(game_id: str, question_id: str, user_id: str) -> list[int]:
