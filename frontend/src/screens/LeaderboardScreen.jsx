@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getLeaderboard, listActivities } from "../api.js";
 import { PRIZES, formatPrize } from "../prizes.js";
+import RankMedal from "../icons/RankMedal.jsx";
 
 const prizeFor = (correct) => (correct > 0 ? formatPrize(PRIZES[correct - 1]) : "—");
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : "—");
@@ -72,7 +73,7 @@ export default function LeaderboardScreen({ currentUser, initialActivityId = "",
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.user_id} className={r.user_id === currentUser?.id ? "lb-me" : ""}>
-                  <td className="lb-rank">{i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</td>
+                  <td className="lb-rank"><RankMedal rank={i + 1} /></td>
                   <td dir="auto">{r.name}</td>
                   <td>{r.best}/{r.total}</td>
                   <td>{prizeFor(r.best)}</td>
